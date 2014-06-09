@@ -1,0 +1,129 @@
+
+This is based on the file microcosm_datalogger_visualisation_v9.Rmd, adapted for more general use.
+
+```{r setup_user,echo=FALSE, message=FALSE,warning=FALSE}
+expt <- "2014-5-23"
+expt_name = "martin1"
+max_cycle_number <- 20
+min_cycle_number <- 0
+verbose <- FALSE
+
+data_dir <- "D:/Dropbox/sourcetree/fluxan/data"
+output_dir <- "output"
+
+source("R/cycle_table_builder.R")
+
+pt_base <- paste("Microcosm expt ",expt,". ", sep="")
+# load libraries
+library(ggplot2)
+library("reshape2")
+```
+
+Kalahari microcosm carbon flux experiment `r expt` - datalogger visualisation
+===================================================================
+ 
+```{r setup_info, echo=FALSE}
+cat("Script version: ",script_version,
+    ".\nCore mass file: ", core_mass_file,
+    ".\nSave cycle table: ", save_cycle_table,
+    ".\nMax cycle: ", max_cycle_number,
+    ".\nMin cycle: ",min_cycle_number)
+cat("Start time: ",as.character(d$time[1]),
+    "\nEnd time: ",as.character(d$time[nrow(d)]),
+    "\nLights on:",day_start$hour,":",day_start$min,
+    "\nLights off:",day_end$hour,":",day_end$min," (",day_end_time_elapsed," hours into experiment)",
+    "\nRef gas conc:",ref_gas_conc,
+    "\nTime zone: ",tz,
+    "\nInfiles: ", infiles)
+
+    if(length(core_mass_file)>0) {
+      print(core_mass_relative[,1:5])
+      cat("water added at ",as.character(time_of_water_addition))
+      }
+```
+
+
+
+```{r core_mass,fig.width=10, fig.height=6,echo=FALSE,message=FALSE,warning=FALSE}
+if(length(core_mass_file)>0) {
+      plot_title <- paste(pt_base,"\nEstimated core mass change")
+      ggplot(subset(d, (IRGA_conn%in%core_names)) ,aes(x=time_elapsed,y=water_content_estimate,colour=factor(IRGA_conn))) + geom_point() + labs(title = plot_title) + facet_wrap(~IRGA_conn,ncol=1) + theme_bw()
+} 
+
+```
+
+
+
+```{r fig.width=14, fig.height=14,echo=FALSE,message=FALSE,warning=FALSE}
+
+plot_title <- paste(pt_base,"Raw CO2 data by cycle number.")
+d.chambers <- subset(d,IRGA_conn!="ND"&IRGA_conn!="ambient"&IRGA_conn!="ref_gas"&cycle!=0)
+d.chambers_ambient <- subset(d,IRGA_conn!="ND"&IRGA_conn!="ref_gas")
+
+ggplot(d.chambers,aes(x=conn_timer_sec,y=IRGA_CO2)) + geom_line(size=0.5, aes(col=IRGA_conn)) + labs(title = plot_title) + facet_wrap(~cycle) + scale_y_continuous(limits=c(200,800)) + theme_bw()
+
+```
+
+
+### Environmental control data check
+```{r plot_env_data,fig.width=14, fig.height=10,echo=FALSE,message=FALSE,warning=FALSE}
+library(scales)
+
+plot_title <- paste(pt_base,"Raw CO2 data by source.")
+ggplot(d.chambers_ambient, aes(x=time, y=IRGA_CO2)) + geom_line(size=0.5, aes(col=IRGA_conn),position = position_jitter(w = 500, h = 0)) + facet_wrap(~IRGA_conn,ncol=1) + scale_y_continuous(limits=c(200,800)) + labs(title = plot_title) + theme_bw()
+
+plot_title <- paste(pt_base,"Temperatures.")
+d.m <- melt(d,measure.vars=c(temp_sensor_col_names,"ref_temp","ref_temp2"))
+ggplot(d.m, aes(x=time, y=value)) + geom_line(size=0.5,aes(col=variable),position = position_jitter(w = 500, h = 0)) + scale_y_continuous(limits=c(5,30)) + labs(title = plot_title) + theme_bw()
+
+plot_title <- paste(pt_base,"Humidity.")
+d.m <- melt(d,measure.vars=c('IRGA_Humidity','ref_humidity'),na.rm=TRUE,)
+ggplot(d.m, aes(x=time, y=value)) + geom_line(size=0.5,aes(col=IRGA_conn),position = position_jitter(w = 500, h = 0)) + facet_wrap(~variable,ncol=1) + labs(title = plot_title) + theme_bw()
+
+plot_title <- paste(pt_base,"Air pressure.")
+d.m <- melt(d,measure.vars=c('IRGA_Pressure','ref_pressure'))
+ggplot(d.m, aes(x=time, y=value)) + geom_point(size=2,aes(col=IRGA_conn),position = position_jitter(w = 500, h = 0)) + facet_wrap(~variable,ncol=1) + labs(title = plot_title) + theme_bw()
+
+
+```
+
+
+```{r Cycle_analysis,warning=FALSE, fig.width=14, fig.height=9,echo=FALSE,message=FALSE}
+#, eval=FALSE
+if(length(cycle_numbers)>0) {
+  
+  plot_title <- paste(pt_base,"CO2 flux per cycle")
+  print(    
+    ggplot(cycle_table,aes(cycle_start_hour,CO2_flux,colour=core,shape=period)) + geom_point(size=5) + labs(title = plot_title) + theme_bw() + scale_y_continuous(name="CO2 flux (mg C m-2 hr-1)") + theme(axis.title.x = element_text(size=20), axis.text.x  = element_text(size=16), axis.title.y = element_text(size=20), axis.text.y  = element_text(size=16), legend.text=element_text(size=18))  + scale_shape_manual(values = c(21,19,22)) 
+        )
+  
+  plot_title <- paste(pt_base,"Chamber temperature")
+  print(
+    ggplot(cycle_table,aes(cycle_start_hour,mean_temperature,shape=period,colour=core,)) + geom_point(size=5) + labs(title = plot_title) + theme_bw() + scale_y_continuous(name="chamber temp") + theme(axis.title.x = element_text(size=20), axis.text.x  = element_text(size=16), axis.title.y = element_text(size=20), axis.text.y  = element_text(size=16), legend.text=element_text(size=18))  + scale_shape_manual(values = c(21,19,22)) 
+        )  
+  
+    plot_title <- paste(pt_base,"CO2 flux per sub-period")
+  print(    
+    ggplot(subset(cycle_table,cycle_table$sub_period!="pre_day1"),aes(core,CO2_flux,fill=core,shape=sub_period)) + geom_boxplot() + labs(title = plot_title) + theme_bw() + scale_y_continuous(name="CO2 flux (mg C m-2 hr-1)") + theme(axis.title.x = element_text(size=20), axis.text.x  = element_text(size=16), axis.title.y = element_text(size=20), axis.text.y  = element_text(size=16), legend.text=element_text(size=18)) 
+    ) 
+
+  #+ scale_shape_manual(values = c(21,19,22)
+  
+  # this plot is meaningless without the dry/wet factors so only make it if we have that info
+  if(time_of_water_addition) {
+    plot_title <- paste(pt_base,"CO2 flux summary")
+    ggplot(cycle_table,aes(factor(core),CO2_flux,colour=core,fill=period)) + geom_boxplot() + labs(title = plot_title) + facet_wrap(~factor1) + theme_bw()
+    
+    plot_title <- paste(pt_base,"CO2 flux summary (wet cycles only)")
+    ggplot(subset(cycle_table,factor1=="wet"),aes(factor(core),CO2_flux,fill=core)) + geom_boxplot() + labs(title = plot_title) + facet_wrap(~period) + theme_bw()
+    
+  }
+
+# end of IF check for sensible cycle numbers
+} else {
+  cat("Not enough cycles available to analyse")
+}
+
+```
+
+
