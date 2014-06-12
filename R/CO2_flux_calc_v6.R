@@ -14,8 +14,8 @@
 # MicrocosmModelling.xlsx
 
 
-const_file <- "data/CO2_flux_calc_constants.txt"
-dimensions_file <- "data/microcosm_dimensions.txt"
+const_file <- paste(data_dir,"/CO2_flux_calc_constants.txt",sep="")
+dimensions_file <- paste(data_dir,"/microcosm_dimensions.txt",sep="")
 
 
 

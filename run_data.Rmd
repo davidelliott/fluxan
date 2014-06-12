@@ -1,11 +1,10 @@
 
-This is based on the file microcosm_datalogger_visualisation_v9.Rmd, adapted for more general use.
-
 ```{r setup_user,echo=FALSE, message=FALSE,warning=FALSE}
+# This is based on the file microcosm_datalogger_visualisation_v9.Rmd, adapted for more general use.
 expt <- "2014-5-23"
 expt_name = "martin1"
-max_cycle_number <- 20
-min_cycle_number <- 0
+max_cycle_number <- 80
+min_cycle_number <- 3
 verbose <- FALSE
 
 data_dir <- "D:/Dropbox/sourcetree/fluxan/data"
@@ -19,8 +18,10 @@ library(ggplot2)
 library("reshape2")
 ```
 
-Kalahari microcosm carbon flux experiment `r expt` - datalogger visualisation
+Microcosm carbon flux experiment `r expt`
 ===================================================================
+This script analyses the datalogger file from a _single_ experimental run, and summarises the results in the exported cycle table. The cycle tables from individual runs are designed to be combined to allow a complete experimental analysis to be performed once all the runs are complete. This can be done in a separate script or by import of the cycle tables to other analysis software.
+
  
 ```{r setup_info, echo=FALSE}
 cat("Script version: ",script_version,
@@ -30,10 +31,10 @@ cat("Script version: ",script_version,
     ".\nMin cycle: ",min_cycle_number)
 cat("Start time: ",as.character(d$time[1]),
     "\nEnd time: ",as.character(d$time[nrow(d)]),
-    "\nLights on:",day_start$hour,":",day_start$min,
-    "\nLights off:",day_end$hour,":",day_end$min," (",day_end_time_elapsed," hours into experiment)",
     "\nRef gas conc:",ref_gas_conc,
     "\nTime zone: ",tz,
+    "\nFactor mapping file: ",mapping_file,
+    "\nTiming file: ",timings_file,
     "\nInfiles: ", infiles)
 
     if(length(core_mass_file)>0) {
@@ -60,7 +61,7 @@ plot_title <- paste(pt_base,"Raw CO2 data by cycle number.")
 d.chambers <- subset(d,IRGA_conn!="ND"&IRGA_conn!="ambient"&IRGA_conn!="ref_gas"&cycle!=0)
 d.chambers_ambient <- subset(d,IRGA_conn!="ND"&IRGA_conn!="ref_gas")
 
-ggplot(d.chambers,aes(x=conn_timer_sec,y=IRGA_CO2)) + geom_line(size=0.5, aes(col=IRGA_conn)) + labs(title = plot_title) + facet_wrap(~cycle) + scale_y_continuous(limits=c(200,800)) + theme_bw()
+ggplot(d.chambers,aes(x=conn_timer_sec,y=IRGA_CO2)) + geom_line(size=0.5, aes(col=IRGA_conn,linetype=light)) + labs(title = plot_title) + facet_wrap(~cycle) + scale_y_continuous(limits=c(200,800)) + theme_bw()
 
 ```
 
@@ -70,19 +71,20 @@ ggplot(d.chambers,aes(x=conn_timer_sec,y=IRGA_CO2)) + geom_line(size=0.5, aes(co
 library(scales)
 
 plot_title <- paste(pt_base,"Raw CO2 data by source.")
-ggplot(d.chambers_ambient, aes(x=time, y=IRGA_CO2)) + geom_line(size=0.5, aes(col=IRGA_conn),position = position_jitter(w = 500, h = 0)) + facet_wrap(~IRGA_conn,ncol=1) + scale_y_continuous(limits=c(200,800)) + labs(title = plot_title) + theme_bw()
+ggplot(d.chambers_ambient, aes(x=time, y=IRGA_CO2)) + geom_line(size=0.5, aes(col=IRGA_conn,linetype=light),position = position_jitter(w = 500, h = 0)) + facet_wrap(~IRGA_conn,ncol=1) + scale_y_continuous(limits=c(200,800)) + labs(title = plot_title) + theme_bw()
 
-plot_title <- paste(pt_base,"Temperatures.")
-d.m <- melt(d,measure.vars=c(temp_sensor_col_names,"ref_temp","ref_temp2"))
-ggplot(d.m, aes(x=time, y=value)) + geom_line(size=0.5,aes(col=variable),position = position_jitter(w = 500, h = 0)) + scale_y_continuous(limits=c(5,30)) + labs(title = plot_title) + theme_bw()
-
+# Disabled temporarily 
+#plot_title <- paste(pt_base,"Temperatures.")
+#d.m <- melt(d,measure.vars=c(temp_sensor_col_names,"ref_temp","ref_temp2"))
+#ggplot(d.m, aes(x=time, y=value)) + geom_line(size=0.5,aes(col=variable,linetype=light),position = position_jitter(w = 500, h = 0)) + scale_y_continuous(limits=c(5,30)) + labs(title = plot_title) + theme_bw()
+#
 plot_title <- paste(pt_base,"Humidity.")
 d.m <- melt(d,measure.vars=c('IRGA_Humidity','ref_humidity'),na.rm=TRUE,)
-ggplot(d.m, aes(x=time, y=value)) + geom_line(size=0.5,aes(col=IRGA_conn),position = position_jitter(w = 500, h = 0)) + facet_wrap(~variable,ncol=1) + labs(title = plot_title) + theme_bw()
+ggplot(d.m, aes(x=time, y=value)) + geom_line(size=0.5,aes(col=IRGA_conn,linetype=light),position = position_jitter(w = 500, h = 0)) + facet_wrap(~variable,ncol=1) + labs(title = plot_title) + theme_bw()
 
 plot_title <- paste(pt_base,"Air pressure.")
 d.m <- melt(d,measure.vars=c('IRGA_Pressure','ref_pressure'))
-ggplot(d.m, aes(x=time, y=value)) + geom_point(size=2,aes(col=IRGA_conn),position = position_jitter(w = 500, h = 0)) + facet_wrap(~variable,ncol=1) + labs(title = plot_title) + theme_bw()
+ggplot(d.m, aes(x=time, y=value)) + geom_point(size=2,aes(col=IRGA_conn,linetype=light),position = position_jitter(w = 500, h = 0)) + facet_wrap(~variable,ncol=1) + labs(title = plot_title) + theme_bw()
 
 
 ```
@@ -94,20 +96,29 @@ if(length(cycle_numbers)>0) {
   
   plot_title <- paste(pt_base,"CO2 flux per cycle")
   print(    
-    ggplot(cycle_table,aes(cycle_start_hour,CO2_flux,colour=core,shape=period)) + geom_point(size=5) + labs(title = plot_title) + theme_bw() + scale_y_continuous(name="CO2 flux (mg C m-2 hr-1)") + theme(axis.title.x = element_text(size=20), axis.text.x  = element_text(size=16), axis.title.y = element_text(size=20), axis.text.y  = element_text(size=16), legend.text=element_text(size=18))  + scale_shape_manual(values = c(21,19,22)) 
+    ggplot(cycle_table,aes(cycle_date_time,CO2_flux,colour=core,shape=light)) + geom_point(size=5) + labs(title = plot_title) + theme_bw() + scale_y_continuous(name="CO2 flux (mg C m-2 hr-1)") + theme(axis.title.x = element_text(size=20), axis.text.x  = element_text(size=16), axis.title.y = element_text(size=20), axis.text.y  = element_text(size=16), legend.text=element_text(size=18))  + scale_shape_manual(values = c(21,19,22)) 
         )
   
   plot_title <- paste(pt_base,"Chamber temperature")
   print(
-    ggplot(cycle_table,aes(cycle_start_hour,mean_temperature,shape=period,colour=core,)) + geom_point(size=5) + labs(title = plot_title) + theme_bw() + scale_y_continuous(name="chamber temp") + theme(axis.title.x = element_text(size=20), axis.text.x  = element_text(size=16), axis.title.y = element_text(size=20), axis.text.y  = element_text(size=16), legend.text=element_text(size=18))  + scale_shape_manual(values = c(21,19,22)) 
+    ggplot(cycle_table,aes(cycle_date_time,mean_temperature,shape=light,colour=core,)) + geom_point(size=5) + labs(title = plot_title) + theme_bw() + scale_y_continuous(name="chamber temp") + theme(axis.title.x = element_text(size=20), axis.text.x  = element_text(size=16), axis.title.y = element_text(size=20), axis.text.y  = element_text(size=16), legend.text=element_text(size=18))  + scale_shape_manual(values = c(21,19,22)) 
         )  
+ 
   
-    plot_title <- paste(pt_base,"CO2 flux per sub-period")
+    plot_title <- paste(pt_base,"Period identification")
+   print(   
+    ggplot(cycle_table, aes(cycle_date_time,period,colour=period)) +   geom_point(size=3) + labs(title = plot_title) + theme_bw() + theme(axis.title.x = element_text(size=20), axis.text.x  = element_text(size=16), axis.title.y = element_text(size=20), axis.text.y  = element_text(size=16), legend.text=element_text(size=18))  
+        ) 
+  
+    plot_title <- paste(pt_base,"CO2 flux per period")
   print(    
-    ggplot(subset(cycle_table,cycle_table$sub_period!="pre_day1"),aes(core,CO2_flux,fill=core,shape=sub_period)) + geom_boxplot() + labs(title = plot_title) + theme_bw() + scale_y_continuous(name="CO2 flux (mg C m-2 hr-1)") + theme(axis.title.x = element_text(size=20), axis.text.x  = element_text(size=16), axis.title.y = element_text(size=20), axis.text.y  = element_text(size=16), legend.text=element_text(size=18)) 
+    ggplot(cycle_table[!is.na(cycle_table$period),],aes(core,CO2_flux,fill=period)) + geom_boxplot() + labs(title = plot_title) + theme_bw() + scale_y_continuous(name="CO2 flux (mg C m-2 hr-1)") + theme(axis.title.x = element_text(size=20), axis.text.x  = element_text(size=16), axis.title.y = element_text(size=20), axis.text.y  = element_text(size=16), legend.text=element_text(size=18)) 
     ) 
 
-  #+ scale_shape_manual(values = c(21,19,22)
+      plot_title <- paste(pt_base,"CO2 flux per factor by period")
+  print(    
+    ggplot(cycle_table[!is.na(cycle_table$period)&!is.na(cycle_table$factor),],aes(factor,CO2_flux,fill=period)) + geom_boxplot() + labs(title = plot_title) + theme_bw() + scale_y_continuous(name="CO2 flux (mg C m-2 hr-1)") + theme(axis.title.x = element_text(size=20), axis.text.x  = element_text(size=16), axis.title.y = element_text(size=20), axis.text.y  = element_text(size=16), legend.text=element_text(size=18)) 
+    ) 
   
   # this plot is meaningless without the dry/wet factors so only make it if we have that info
   if(time_of_water_addition) {

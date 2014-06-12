@@ -1,4 +1,4 @@
-script_version <- 9
+script_version <- 10
 # This script is based on calculations in microcosm_datalogger_visualisatoin_v8.Rmd
 
 # expt : the numerical index of the experinent - this identifies the data files to use as input
@@ -6,6 +6,14 @@ script_version <- 9
 
 #######################################################################################
 # these variables need to be set by the calling script, or uncommented to run directly:
+#expt <- "2014-5-22"
+#expt_name = "martin1"
+#max_cycle_number <- 20
+#min_cycle_number <- 0
+#verbose <- FALSE
+#data_dir <- "D:/Dropbox/sourcetree/fluxan/data"
+#output_dir <- "output"
+
 # expt <- "044"
 # expt_name = "30C"
 # data_dir <- paste("C:\\sync\\lab_book\\kalahari\\files\\microcosms",sep="")
@@ -22,20 +30,7 @@ day_end <- as.POSIXlt("01/01/01-07:00","UTC","%d/%m/%Y-%H:%M")
 #day_start <- as.POSIXlt("01/01/01-06:00","UTC","%d/%m/%Y-%H:%M")
 #day_end <- as.POSIXlt("01/01/01-18:00","UTC","%d/%m/%Y-%H:%M")
 tz="UTC"
-# adjustment for british summer time (error was made in setup of expt 36). Expts 36 on were run on BST
-# No time adjustment should be needed in this script because the Gallenkamp chamber program was adjusted
 
-# NOTE - this commented out when converting script for general use in repository "fluxan"
-#if(as.numeric(expt)==36) {
-#  day_start <- as.POSIXlt("01/01/01-07:00","UTC","%d/%m/%Y-%H:%M")
-#  day_end <- as.POSIXlt("01/01/01-19:00","UTC","%d/%m/%Y-%H:%M")
-#  tz="UTC+1"
-#}
-#if(as.numeric(expt)>36) {
-#  # day_start <- as.POSIXlt("01/01/01-05:00","UTC","%d/%m/%Y-%H:%M")
-#  # day_end <- as.POSIXlt("01/01/01-17:00","UTC","%d/%m/%Y-%H:%M")
-#  tz="UTC+1"
-#}
 
 expt_dir <- paste(data_dir,"\\",expt,sep="")
 # setwd(expt_dir)
@@ -52,6 +47,8 @@ functions_dir <- "R"
 # infile <- paste(expt_dir,"\\","2012-12-14_10,18,24_datalogger.txt",sep="")
 infiles <- Sys.glob(file.path(expt_dir, "*datalogger.txt"))
 core_mass_file <- Sys.glob(file.path(expt_dir, "*mass.txt"))
+timings_file <- paste(expt_dir,"timing.txt",sep="/")
+mapping_file <- paste(expt_dir,"chamber_map.txt",sep="/")
 
 # load libraries
 library("reshape2")
@@ -63,6 +60,20 @@ for(i in infiles) {
   if(verbose) { print(i)}
   x <- read.table(i,header=TRUE,stringsAsFactors=TRUE,na.strings=c("-1","-1.0","NA"))
   d <- rbind(d,x)
+}
+
+t <- read.table(timings_file,header=TRUE,stringsAsFactors=TRUE,na.strings=c("-1","-1.0","NA"))
+d <- cbind(d,t)
+
+m <- read.table(mapping_file,header=TRUE,stringsAsFactors=TRUE,na.strings=c("-1","-1.0","NA"))
+
+d$factor <- NA
+for (id in m$chamber_id) {
+  d[d$IRGA_conn==id,"factor"] <- as.character(m[m$chamber_id==id,"factor"] )
+}
+
+if (!identical(d$time,d$event_time)) {
+ stop("Time column in main datafame does not match event_time column in timings file. Quitting")
 }
 
 # Work out which core is connected to each chamber, and also make a table relating the temp probes
@@ -229,7 +240,6 @@ cycle_numbers <- cycle_numbers[cycle_numbers!=max(cycle_numbers)]
 
 cycle_table <- data.frame()
 
-# cycle_numbers[9] in expt 38 causes NAN error -> cycle 11
 
 if(length(cycle_numbers)>0) {
   for(this_cycle in cycle_numbers) {
@@ -255,9 +265,12 @@ if(length(cycle_numbers)>0) {
       
       cycle_length_s <- chamber_open_time - chamber_closed_time
       
-      wanted_fields <- c("time","time_elapsed","conn_timer","IRGA_conn","IRGA_CO2","IRGA_Pressure","ref_pressure","ref_temp","IRGA_Humidity",this_core_temperature_name,"time_UTC_decimal_hour","water_content_estimate") # 
-
-      
+      wanted_fields <- c("time","time_elapsed","conn_timer","IRGA_conn","period","light","factor","IRGA_CO2","IRGA_Pressure","ref_pressure","ref_temp","IRGA_Humidity",this_core_temperature_name,"time_UTC_decimal_hour","water_content_estimate") # 
+  
+      # TODO
+      # CHeck here
+      # Why are d.this_cycle.closed and d.this_cycle.open constructed differently? The former includes all cores whilst the latter only 1 core
+      # Probably the latter case is better and should be used for .closed too.
       d.this_cycle.closed <- d[(d$time_elapsed>chamber_closed_time)&(d$time_elapsed<chamber_open_time),wanted_fields]
       d.this_cycle.open <- subset(d,(cycle==this_cycle)&(IRGA_conn==core))[,colnames(d.this_cycle.closed)]
       cycle_start_hour <- d$time_elapsed_hour[d$time_elapsed==chamber_closed_time]
@@ -275,55 +288,31 @@ if(length(cycle_numbers)>0) {
       
       # cycle time of day
       cycle_start_time <- d$time_UTC_decimal_hour[d$time_elapsed==chamber_closed_time]
-      cycle_end_time <- d$time_UTC_decimal_hour[d$time_elapsed==chamber_closed_time]
+      cycle_end_time <- d$time_UTC_decimal_hour[d$time_elapsed==chamber_open_time]
       cycle_start_time_UTC <- d$time[d$time_elapsed==chamber_closed_time]
       cycle_start_time_elapsed <- d$time_elapsed_hour[d$time_elapsed==chamber_closed_time]
-      
-      if ((cycle_start_time>day_end_decimal)|(cycle_end_time<day_start_decimal)) {
-        period <- "night"
-      } else if ((cycle_start_time>day_end_decimal)&(cycle_end_time>day_end_decimal)) {
-        # this condition is just to catch the occasional case that happens near midnight
-        period <- "night"
-      }else if ((cycle_start_time<day_end_decimal)&(cycle_end_time>day_start_decimal)){
-        period <- "day"
-      } else {
-        period <- "dusk"   
+      # big cut from here - period and light was previously hardcoded/semi-auto #####
+      # Now take this from the main dataframe instead:
+      period <- NA
+      light <- NA
+      factor <- NA
+      if (length(unique(d.this_cycle.closed[,c("period")])) == 1) {
+        period <- unique(d.this_cycle.closed[,c("period")])
+      }
+      if (length(unique(d.this_cycle.closed[,c("light")])) == 1) {
+        light <- unique(d.this_cycle.closed[,c("light")])
+      }
+      if (length(unique(d.this_cycle.open[,c("factor")])) == 1) {
+        factor <- unique(d.this_cycle.open[,c("factor")])
       }
       
-      # identify if any results are from the second day (i.e. the morning when the experiment is stopped)
-      cycle_start_time_within_expt <- d$time_elapsed_hour[d$time_elapsed==chamber_closed_time]
-      if ((period=="day")&(cycle_start_time_within_expt>14)) {
-        period <- "day2"
-      }
+
+      #if (length(unique(d.this_cycle.closed[,c("factor")])) == 1) {
+      #  factor <- unique(d.this_cycle.closed[,c("factor")])
+      #}
       
-      # NOTE: sub-period calc below was added after the period calc (above). It is probably better.
-      # consider removing original period calc (above), and use code below instead to identify period
-      
-      # identify the cycle time more accurately (define sub_period)
-      # time split into 3 hour blocks for comparisons: day1, night1-4, day2
-      # This calculation relies on the assumption that lights come on 12 hours after lights off!
-      # time_to_lights_off <- as.numeric(day_end - cycle_start_time_UTC)
-      time_to_lights_off <- day_end_time_elapsed - cycle_start_time_elapsed
-      
-      if (time_to_lights_off > 3) {
-        sub_period <- "pre_day1"
-      }else if ((time_to_lights_off <= 3)&(time_to_lights_off > 0)) {
-        sub_period <- "day1"
-      }else if ((time_to_lights_off <= 0)&(time_to_lights_off > -3)) {
-        sub_period <- "night1"
-      }else if ((time_to_lights_off <= -3)&(time_to_lights_off > -6)) {
-        sub_period <- "night2"
-      }else if ((time_to_lights_off <= -6)&(time_to_lights_off > -9)) {
-        sub_period <- "night3"
-      }else if ((time_to_lights_off <= -9)&(time_to_lights_off > -12)) {
-        sub_period <- "night4"
-      }else if ((time_to_lights_off <= -12)&(time_to_lights_off > -15)) {
-        sub_period <- "day2"
-      }else if (time_to_lights_off <= -15) {
-        sub_period <- "post_day2"
-      }else {
-        sub_period = NA
-      }
+      # date and time of cycle
+      cycle_date_time <- cycle_start_time_UTC
       
       # temperature during cycle
       cycle_temperature <- d.this_cycle.closed[,c(this_core_temperature_name)]
@@ -380,7 +369,8 @@ if(length(cycle_numbers)>0) {
       CO2_flux <- flux(mean_temperature, CO2_change, cycle_length_s, mean_pressure,verbose=FALSE)
       
       cycle <- this_cycle # for naming consistency in cycle table
-      cycle_table <- rbind(cycle_table,data.frame(expt,core,cycle,cycle_start_hour,cycle_start_time,cycle_end_time,period,sub_period,time_to_lights_off,factor1,mean_temperature,mean_pressure,CO2_change,measurement_pressure_change,ref_gas_conc,time_since_water_addition_h,water_content_ml,CO2_flux))
+      #cycle_table <- rbind(cycle_table,data.frame(expt,core,cycle,cycle_start_hour,period,light,factor1,mean_temperature,mean_pressure,CO2_change,measurement_pressure_change,ref_gas_conc,water_content_ml,CO2_flux))
+      cycle_table <- rbind(cycle_table,data.frame(expt,core,cycle,cycle_date_time,cycle_start_hour,cycle_start_time,cycle_end_time,period,light,factor,factor1,mean_temperature,mean_pressure,CO2_change,measurement_pressure_change,ref_gas_conc,time_since_water_addition_h,water_content_ml,CO2_flux))
       
       #
     }
@@ -394,9 +384,8 @@ if(length(cycle_numbers)>0) {
     if (!file.exists(cycle_table_output_dir)){
       dir.create(cycle_table_output_dir)
     } 
-    
-    write.table(cycle_table,cycle_table_output_file)
-    cat("The generated cycle table was saved to ",cycle_table_output_file)
+    write.table(cycle_table,cycle_table_output_file,sep="\t",col.names = TRUE,row.names = FALSE)
+    cat("The generated cycle table was saved to ",cycle_table_output_file, "as tab separated text file")
   } else {
     cat("Cycle table was not saved.") 
   }
