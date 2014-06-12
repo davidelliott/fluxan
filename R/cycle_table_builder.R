@@ -34,11 +34,11 @@ tz="UTC"
 
 expt_dir <- paste(data_dir,"\\",expt,sep="")
 # setwd(expt_dir)
-cycle_table_output_dir <- paste(output_dir,"\\cycle_tables_",expt_name,"_v",script_version,sep="")
-simple_cycle_table_dir <- paste(output_dir,"\\cycle_tables(simple)_",expt_name,"_v",script_version,sep="")
+cycle_table_output_dir <- paste(output_dir,"/cycle_tables_",expt_name,"_v",script_version,sep="")
+simple_cycle_table_dir <- paste(output_dir,"/cycle_tables_simple_",expt_name,"_v",script_version,sep="")
 
-cycle_table_output_file <- paste(cycle_table_output_dir,"\\",expt,"-cycle_table.txt",sep="")
-simple_cycle_table_output_file <- paste(simple_cycle_table_dir,"\\",expt,"-cycle_table.txt",sep="")
+cycle_table_output_file <- paste(cycle_table_output_dir,"/",expt,"-cycle_table.csv",sep="")
+simple_cycle_table_output_file <- paste(simple_cycle_table_dir,"/",expt,"-cycle_table.csv",sep="")
 
 functions_dir <- "R"
 
@@ -385,9 +385,9 @@ if(length(cycle_numbers)>0) {
       dir.create(cycle_table_output_dir)
     } 
     write.table(cycle_table,cycle_table_output_file,sep="\t",col.names = TRUE,row.names = FALSE)
-    cat("The generated cycle table was saved to ",cycle_table_output_file, "as tab separated text file")
+    if(verbose) { cat("The generated cycle table was saved to ",cycle_table_output_file, "as tab separated text file") }
   } else {
-    cat("Cycle table was not saved.") 
+    if(verbose) { cat("Cycle table was not saved.")  }
   }
 
 }
